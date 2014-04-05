@@ -191,6 +191,6 @@ if __name__ == "__main__":
         main()
     except Exception as exc:
         exc_type, exc_obj, exc_tb = sys.exc_info()
-        msg = "Exception occured in main: "+str(type(exc)) +
+        msg = "Exception occured in main: "+str(type(exc)) +\
         "  args:"+str(exc)+" line:"+str(exc_tb.tb_lineno)
         print msg

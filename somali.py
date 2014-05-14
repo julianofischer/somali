@@ -12,15 +12,29 @@ import sqlite3
 import argparse
 from BeautifulSoup import BeautifulSoup
 import lucene
-from lucene import SimpleFSDirectory, System, File, Document, Field,\
-    StandardAnalyzer, IndexWriter, Version, IndexSearcher, QueryParser
+from java.io import File
+from java.io import StringReader
+from java.lang import System
+from org.apache.lucene.store import SimpleFSDirectory
+from org.apache.lucene.document import Document, Field, StringField, TextField
+from org.apache.lucene.index import IndexWriter
+from org.apache.lucene.index import IndexWriterConfig
+from org.apache.lucene.search import IndexSearcher
+from org.apache.lucene.index import DirectoryReader
+from org.apache.lucene.index import IndexReader
+from org.apache.lucene.analysis.standard import StandardAnalyzer
+from org.apache.lucene.util import Version
+from org.apache.lucene.queryparser.classic import QueryParser
+from org.apache.lucene.search.highlight import Highlighter
+from org.apache.lucene.search.highlight import QueryScorer
+from org.apache.lucene.search.highlight import SimpleHTMLFormatter
+from org.apache.lucene.search.highlight import SimpleSpanFragmenter
 
 db_filename = 'one.db'
 db_schema = """create table if not exists monthly_archive (
                      id integer primary key autoincrement,
                      link text)
 """
-
 
 # class: representing a connection with the DB
 # filename: the file used by sqlite3
@@ -120,12 +134,9 @@ def lucene_indexing():
     lucene.initVM()
     index_dir = os.getcwd()
     dir = SimpleFSDirectory(File(index_dir))
-    analyzer = StandardAnalyzer(lucene.Version.LUCENE_CURRENT)
-
-    index_writer = lucene.IndexWriter(
-        dir, analyzer, True,
-        lucene.IndexWriter.MaxFieldLength.LIMITED
-    )
+    analyzer = StandardAnalyzer(Version.LUCENE_48)
+    index_writer_config = IndexWriterConfig(Version.LUCENE_48, analyzer);
+    index_writer = IndexWriter(dir, index_writer_config)
 
     for tfile in glob.glob(os.path.join(index_dir, '*.txt')):
         print "Indexing: ", tfile
@@ -137,36 +148,66 @@ def lucene_indexing():
         document.add(Field("title", tfile, Field.Store.YES,
                            Field.Index.ANALYZED))
         index_writer.addDocument(document)
-
-    index_writer.optimize()
     print index_writer.numDocs()
     index_writer.close()
 
 
-def lucene_search(query):
+def lucene_search(query, MAX, showHighlight):
     dir = os.getcwd()
     lucene.initVM()
     index_dir = SimpleFSDirectory(File(dir))
-    lucene_analyzer = StandardAnalyzer(lucene.Version.LUCENE_CURRENT)
-    lucene_searcher = IndexSearcher(index_dir)
-    my_query = QueryParser(lucene.Version.LUCENE_CURRENT, "text",
+    index_reader = DirectoryReader.open(index_dir)
+    lucene_searcher = IndexSearcher(index_reader)
+    lucene_analyzer = StandardAnalyzer(Version.LUCENE_48)
+    my_query = QueryParser(Version.LUCENE_48, "text",
                            lucene_analyzer).parse(query)
-    MAX = 10
+    #We can define the MAX number of results (default 10)
     total_hits = lucene_searcher.search(my_query, MAX)
 
+    query_scorer = QueryScorer(my_query)
+    formatter = SimpleHTMLFormatter()
+    highlighter = Highlighter(formatter, query_scorer)
+    # Set the fragment size. We break text in to fragment of 50 characters
+    fragmenter = SimpleSpanFragmenter(query_scorer, 50)
+    highlighter.setTextFragmenter(fragmenter)
+
+    print "Only shows at most %s documents" % MAX
+    if showHighlight:
+        print "<br>"
+
     for hit in total_hits.scoreDocs:
+
         doc = lucene_searcher.doc(hit.doc)
+        text = doc.get("text")
+        ts = lucene_analyzer.tokenStream("text", StringReader(text))
+        
+        if showHighlight:
+            print "<p>"
+
         print doc.get("title")
 
+        if showHighlight:
+            print "<br>"
+            print highlighter.getBestFragments(ts, text, 3, "...")
+            print "</p>"
 
 def main():
     parse = argparse.ArgumentParser()
     parse.add_argument("-update", help="Update the archive by\
-        downloadig the last monthly entries", action='store_true')
+        downloading the last monthly entries", action='store_true')
     parse.add_argument("-query", help="The query", required=True)
+    parse.add_argument("-maxresults", metavar='N', type=int, 
+        help='an integer for the max number of results to show')
+    parse.add_argument("-highlight", action='store_true',
+        help='show the highlighted query in context with html format')
+
     args = parse.parse_args(sys.argv[1:])
 
     createDB()
+
+    showHighlighted = False
+    if args.highlight:
+        showHighlighted = True
 
     if args.update:
         r = do_login()
@@ -183,8 +224,10 @@ def main():
             lucene_indexing()
         else:
             print "Wrong username/password..."
+    elif (args.query and args.maxresults):
+        lucene_search(args.query, args.maxresults, showHighlighted)
     elif args.query:
-        lucene_search(args.query)
+        lucene_search(args.query, 10, showHighlighted)
 
 if __name__ == "__main__":
     try:

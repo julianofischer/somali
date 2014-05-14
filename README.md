@@ -3,24 +3,15 @@ somali
 
 Searching theONE mailing list via command line.
 
-1st use: python somali.py -update -query "The text you're searching."
+1st use: 
+python somali.py -update -query "The text you're searching."
 
-After: python somali.py -query "The text you're searching."
+After: 
+python somali.py -query "The text you're searching."
 
-Recommended: python somali.py -query "The text you're searching." -maxresults 20 > results.html
-and open the file results.html in a web explorer
+Recommended: 
+python somali.py -query "The text you're searching." -maxresults 20 -highlight > results.html
 
-##################################################################
-usage: somali.py [-h] [-update] -query QUERY [-maxresults N] [-highlight]
-
-optional arguments:
-  -h, --help     show this help message and exit
-  -update        Update the archive by downloading the last monthly entries
-  -query QUERY   The query
-  -maxresults N  an integer for the max number of results to show
-  -highlight     show the highlighted query in context with html format
-
-##################################################################
 
 
 ### Dependencies ###
